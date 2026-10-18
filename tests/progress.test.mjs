@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+const code=ts.transpileModule(fs.readFileSync('src/progress.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {compare,change,totals,startOf}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+let n=0;const test=(name,fn)=>{fn();n++;console.log('PASS',name);};
+const row=(date,reps,duration=60)=>({date:new Date(date).toISOString(),reps,duration});
+const now=new Date(2026,9,16,12);
+test('10 percent more, 5 percent less, zero baselines',()=>{assert.equal(change(110,100),'10% more');assert.equal(change(95,100),'5% less');assert.equal(change(0,0),'No activity in either period');assert.match(change(2,0),/no previous baseline/);assert.equal(change(0,10),'100% less');});
+test('daily comparison excludes future and unmatched afternoon',()=>{const c=compare([row(new Date(2026,9,16,10),11),row(new Date(2026,9,15,10),10),row(new Date(2026,9,15,15),50),row(new Date(2026,9,16,15),50)],'day',0,now);assert.equal(c.current.reps,11);assert.equal(c.previous.reps,10);});
+test('week starts Monday and matches weekday/time',()=>{const c=compare([],'week',0,now);assert.equal(c.start.getDay(),1);assert.equal(c.previousEnd.getDay(),5);assert.equal(c.previousEnd.getHours(),12);});
+test('short month caps comparison and leap year works',()=>{const c=compare([],'month',0,new Date(2024,2,31,12));assert.equal(c.previousStart.getMonth(),1);assert.equal(c.previousEnd.getMonth(),2);assert.equal(c.previousEnd.getDate(),1);});
+test('previous period contains full day and excludes next midnight',()=>{const c=compare([row(new Date(2026,9,15,23,59),8),row(new Date(2026,9,16,0),10)],'day',-1,now);assert.equal(c.current.reps,8);assert.equal(c.partial,false);});
+test('year boundary and rollup agree',()=>{const r=[row(new Date(2025,11,31,14),3),row(new Date(2026,0,1,14),5)];const c=compare(r,'month',0,new Date(2026,0,15));assert.equal(c.previous.reps,0);const all=totals(r,new Date(2025,11,1),new Date(2026,1,1));assert.equal(all.reps,8);assert.equal(all.days,2);});
+test('duplicate date counts one active day',()=>{const c=compare([row(now,2),row(now,3)],'day',0,new Date(2026,9,16,13));assert.equal(c.current.days,1);assert.equal(c.current.recordings,2);});
+console.log(n+' progress checks passed');

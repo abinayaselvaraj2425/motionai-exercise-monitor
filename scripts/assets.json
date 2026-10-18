@@ -1,0 +1,12 @@
+[
+  {
+    "path": "mediapipe/pose_landmarker_lite.task",
+    "url": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+    "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"
+  },
+  {
+    "path": "diagnostics/pose-model.png",
+    "url": "https://raw.githubusercontent.com/google-ai-edge/mediapipe-samples-web/main/public/pose_model.png",
+    "sha256": "884e822bf3f1585fdfdf1f36c06c47ceec3d745757cc14abac9cacf45353de63"
+  }
+]

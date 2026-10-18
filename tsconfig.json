@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true
+  },
+  "include": [
+    "src/App.tsx",
+    "src/data.ts",
+    "src/pose.ts",
+    "src/camera.ts",
+    "src/PoseClient.ts",
+    "src/pose-worker.ts",
+    "src/draft.ts",
+    "src/main.tsx",
+    "src/components/AppUI.tsx",
+    "src/components/MovementDemo.tsx",
+    "src/components/DatasetExplorer.tsx",
+    "src/components/LiveCameraTracker.tsx",
+    "src/components/SkeletonViewer.tsx"
+  ]
+}
