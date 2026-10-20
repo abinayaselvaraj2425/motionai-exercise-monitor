@@ -18,26 +18,27 @@ TEMPLATES = [
     dict(id='standing', name='Standing reset', tag='A SHORTER SESSION', description='A compact standing sequence with no floor exercise or jumping.', steps=[WARM, movement('shoulder_press','Shoulder press · no weights',8), movement('squat','Bodyweight squat',8), COOL]),
 ]
 
+def reconcile(db, run):
+    # A save that succeeded just before a browser reload is picked up automatically.
+    for step in run['steps']:
+        if 'exercise' not in step:
+            continue
+        row = db.execute('SELECT payload FROM sessions WHERE id=?', (step['recording_id'],)).fetchone()
+        if row:
+            s = json.loads(row[0])
+            if s['exercise'] == step['exercise']:
+                step.update(status='done' if s['reps'] >= step['target'] else 'partial', session_id=s['id'], reps=s['reps'], duration=s['duration'])
+        elif step.get('session_id'):
+            step.update(status='missing', reps=0, duration=0)
+    run['reps'] = sum(s.get('reps', 0) for s in run['steps'])
+    run['duration'] = sum(s.get('duration', 0) for s in run['steps'])
+    run['complete'] = all(s['status'] == 'done' for s in run['steps'])
+    return run
+
+
 def register_routines(app, database):
     def table(db):
         db.execute('CREATE TABLE IF NOT EXISTS routines (id TEXT PRIMARY KEY, date TEXT NOT NULL, payload TEXT NOT NULL)')
-
-    def reconcile(db, run):
-        # A save that succeeded just before a browser reload is picked up automatically.
-        for step in run['steps']:
-            if 'exercise' not in step:
-                continue
-            row = db.execute('SELECT payload FROM sessions WHERE id=?', (step['recording_id'],)).fetchone()
-            if row:
-                s = json.loads(row[0])
-                if s['exercise'] == step['exercise'] and s['source'] == 'camera':
-                    step.update(status='done' if s['reps'] >= step['target'] else 'partial', session_id=s['id'], reps=s['reps'], duration=s['duration'])
-            elif step.get('session_id'):
-                step.update(status='missing', reps=0, duration=0)
-        run['reps'] = sum(s.get('reps', 0) for s in run['steps'])
-        run['duration'] = sum(s.get('duration', 0) for s in run['steps'])
-        run['complete'] = all(s['status'] == 'done' for s in run['steps'])
-        return run
 
     @app.get('/api/routine-templates')
     def templates():

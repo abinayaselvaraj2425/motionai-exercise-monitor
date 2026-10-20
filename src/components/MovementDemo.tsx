@@ -103,8 +103,8 @@ export function MovementDemo({ exercise }: { exercise: ExerciseType }) {
   useEffect(() => { elapsed.current = 0; setT(0); }, [exercise]);
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const changed = () => { if (preference.matches) setPlay(false); };
-    preference.addEventListener('change', changed);
+    const changed = () => { if (preference.matches || document.documentElement.dataset.reducedMotion==='true') setPlay(false); };
+    changed();preference.addEventListener('change', changed);
     return () => preference.removeEventListener('change', changed);
   }, []);
   useEffect(() => {

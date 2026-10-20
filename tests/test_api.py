@@ -19,6 +19,8 @@ class SubmissionTests(unittest.TestCase):
         api.DB_PATH=directory/(str(uuid.uuid4())+'.sqlite')
         api.load_model()
         cls.client=TestClient(api.app)
+        from tests import sign_in
+        sign_in(cls.client)
         cls.fixture=cls.recording()
 
     @staticmethod
@@ -135,8 +137,8 @@ class SubmissionTests(unittest.TestCase):
 
     def test_profile_and_origin_protection(self):
         profile={'name':'Test athlete','weeklyGoal':4,'repTarget':12,'audio':False}
-        self.assertEqual(self.client.put('/api/profile',json=profile).json(),profile)
-        self.assertEqual(self.client.get('/api/profile').json(),profile)
+        self.assertEqual({k:v for k,v in self.client.put('/api/profile',json=profile).json().items() if k in profile},profile)
+        self.assertEqual({k:v for k,v in self.client.get('/api/profile').json().items() if k in profile},profile)
         self.assertEqual(self.client.put('/api/profile',json={**profile,'weeklyGoal':0}).status_code,422)
         self.assertEqual(self.client.post('/api/sessions',json=self.fixture,headers={'Origin':'https://external.invalid'}).status_code,403)
         self.assertEqual(self.client.post('/api/sessions',json=self.fixture,headers={'Content-Length':'invalid'}).status_code,400)

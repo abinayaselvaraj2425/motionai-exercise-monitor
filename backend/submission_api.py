@@ -15,8 +15,11 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from backend.accounts import current_user, register_accounts
 
 ROOT = Path(__file__).resolve().parent.parent
+from backend.configuration import load_configuration
+load_configuration(ROOT)
 DB_PATH = Path(os.environ.get('MOTIONAI_DB', str(ROOT / 'data' / 'motionai.sqlite')))
 CHECKPOINT = ROOT / 'models' / 'motionbert' / 'best_epoch.bin'
 EXERCISES = {'squat', 'lunge', 'push_up', 'jumping_jack', 'shoulder_press'}
@@ -42,8 +45,10 @@ def camera_assets():
 
 @contextmanager
 def database():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH, timeout=30)
+    user = current_user.get()
+    path = Path(os.environ.get('MOTIONAI_USER_DATA_DIR',str(ROOT / 'data' / 'users'))) / (user['id'] + '.sqlite') if user else DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30)
     connection.execute('CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, date TEXT NOT NULL, payload TEXT NOT NULL)')
     connection.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     try:
@@ -70,6 +75,9 @@ def _load_model():
         from backend.motionbert.model import DSTformer
         if not CHECKPOINT.is_file():
             raise FileNotFoundError('MotionBERT checkpoint not configured. Run the checkpoint downloader.')
+        verified_hash = hashlib.sha256(CHECKPOINT.read_bytes()).hexdigest()
+        if verified_hash != '9811155371db4ca5d20f31a36a232d41012e12e1333882888a564d741861148f':
+            raise ValueError('MotionBERT checkpoint checksum does not match the official verified file.')
         torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
         candidate = DSTformer(dim_in=3, dim_out=3, dim_feat=256, dim_rep=512, depth=5, num_heads=8, mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), maxlen=243, num_joints=17, att_fuse=True)
         # Official checkpoint contains a state dictionary plus training metadata.
@@ -79,7 +87,7 @@ def _load_model():
         # Reject partial/mismatched weights; never run with randomly initialized missing layers.
         candidate.load_state_dict(weights, strict=True)
         candidate.eval()
-        model_hash = hashlib.sha256(CHECKPOINT.read_bytes()).hexdigest()
+        model_hash = verified_hash
         parameters = sum(p.numel() for p in candidate.parameters())
         model = candidate
         model_error = None
@@ -97,10 +105,15 @@ async def lifespan(app):
     threading.Thread(target=load_model, name='motionbert-loader', daemon=True).start()
     yield
 
-app = FastAPI(title='MotionAI Exercise Monitoring', version='1.1.0', lifespan=lifespan)
+app = FastAPI(title='MotionAI Exercise Monitoring', version='2.0.0', lifespan=lifespan)
+register_accounts(app, ROOT)
 
 @app.middleware('http')
 async def local_requests(request: Request, call_next):
+    allowed = os.getenv('MOTIONAI_ALLOWED_HOSTS', 'localhost,127.0.0.1,::1,testserver').split(',')
+    if request.url.hostname not in allowed:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={'detail':'This host is not allowed.'})
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
         origin = request.headers.get('origin')
         if origin and origin != f"{request.url.scheme}://{request.headers.get('host')}":
@@ -116,6 +129,14 @@ async def local_requests(request: Request, call_next):
         if length > 30_000_000:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=413, content={'detail':'Recording is too large. Maximum upload size is 30 MB.'})
+        chunks=[];size=0
+        async for chunk in request.stream():
+            size+=len(chunk)
+            if size>30_000_000:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=413,content={'detail':'Recording is too large. Maximum upload size is 30 MB.'})
+            chunks.append(chunk)
+        request._body=b''.join(chunks)
     return await call_next(request)
 
 class ProfileInput(BaseModel):
@@ -123,6 +144,9 @@ class ProfileInput(BaseModel):
     weeklyGoal: int = Field(default=3, ge=1, le=14)
     repTarget: int = Field(default=10, ge=1, le=100)
     audio: bool = True
+    goal: str = Field(default='Build a movement habit', max_length=100)
+    onboarded: bool = False
+    reducedMotion: bool = False
 
 @app.get('/api/profile')
 def get_profile():
@@ -142,7 +166,8 @@ def update_profile(profile: ProfileInput):
 
 @app.get('/api/health')
 def health():
-    return {'status':'healthy', 'app':'motionai', 'version':app.version, 'camera':camera_assets(), 'motionbert':{'loaded':model is not None, 'state':model_state, 'name':'MotionBERT-Lite / DSTformer', 'error':model_error, 'parameters':parameters, 'checkpoint_sha256':model_hash}}
+    installation_id=hashlib.sha256(str(ROOT.resolve()).casefold().encode('utf-8')).hexdigest()[:16]
+    return {'status':'healthy', 'app':'motionai', 'version':app.version, 'api_version':2, 'installation_id':installation_id, 'camera':camera_assets(), 'motionbert':{'loaded':model is not None, 'state':model_state, 'name':'MotionBERT-Lite / DSTformer', 'error':model_error, 'parameters':parameters, 'checkpoint_sha256':model_hash}}
 
 def finite_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and bool(np.isfinite(value))
@@ -220,13 +245,18 @@ def validate_session(data):
     except (TypeError,ValueError):
         raise HTTPException(422, 'Invalid session date.')
     # Model outputs are server-owned, never trusted from an uploaded JSON file.
-    return {key:data[key] for key in ('exercise','date','reps','duration','target','source','frames')}
+    clean = {key:data[key] for key in ('exercise','date','reps','duration','target','source','frames')}
+    clean['date'] = parsed.astimezone(timezone.utc).isoformat()
+    if frames[-1]['timestamp'] > (data['duration'] + 2) * 1000:
+        raise HTTPException(422, 'Frame timestamps exceed the session duration.')
+    clean['status'] = 'completed' if data['reps'] >= data['target'] else 'partial'
+    return clean
 
 @app.get('/api/sessions')
 def list_sessions():
     with database() as db:
         rows=db.execute('SELECT payload FROM sessions ORDER BY date DESC').fetchall()
-    return [session_summary(json.loads(row[0])) for row in rows]
+    return sorted([session_summary(json.loads(row[0])) for row in rows],key=lambda s:datetime.fromisoformat(s['date'].replace('Z','+00:00')),reverse=True)
 
 @app.post('/api/sessions', status_code=201)
 def create_session(data: dict):
@@ -296,10 +326,13 @@ def motion_analysis(session):
     output=[]
     started=time.perf_counter()
     with torch.inference_mode():
-        for offset in range(0,len(tensor),243):
-            clip=torch.from_numpy(tensor[offset:offset+243]).unsqueeze(0)
-            prediction=model(clip).squeeze(0).cpu().numpy()
-            output.append(prediction)
+        # Do not infer temporal continuity across camera/visibility gaps.
+        boundaries=[0]+[i for i in range(1,len(tensor)) if session['frames'][i]['timestamp']-session['frames'][i-1]['timestamp']>650]+[len(tensor)]
+        for begin,end in zip(boundaries,boundaries[1:]):
+            for offset in range(begin,end,243):
+                clip=torch.from_numpy(tensor[offset:min(offset+243,end)]).unsqueeze(0)
+                prediction=model(clip).squeeze(0).cpu().numpy()
+                output.append(prediction)
     pose=np.concatenate(output)
     if not np.isfinite(pose).all():
         raise RuntimeError('Model produced invalid coordinates.')
@@ -358,6 +391,10 @@ def research_analysis(name:str):
 
 from backend.routines import register_routines
 register_routines(app, database)
+from backend.reports import register_reports
+register_reports(app, database, read_session, validate_session, session_summary)
+from backend.assistant import register_assistant
+register_assistant(app, list_sessions, read_session)
 
 @app.get('/{path:path}', include_in_schema=False)
 def frontend(path: str):

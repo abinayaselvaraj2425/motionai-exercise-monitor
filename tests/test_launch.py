@@ -7,6 +7,17 @@ from backend import launch
 
 
 class LaunchTests(unittest.TestCase):
+    def test_old_and_other_installations_are_not_reused(self):
+        self.assertEqual(launch.classify_server({'app':'motionai','version':'1.1.0'}),'outdated')
+        self.assertEqual(launch.classify_server({'app':'motionai','api_version':2,'installation_id':'another-folder'}),'other-motionai')
+        self.assertEqual(launch.classify_server({'app':'motionai','api_version':2,'installation_id':launch.installation_id()}),'motionai')
+
+    def test_old_server_provides_restart_instructions(self):
+        with patch.object(launch,'configure_local_runtime'),patch.object(launch,'preflight',return_value=None),patch.object(launch,'existing_server',return_value='outdated'),patch('sys.stderr',new=io.StringIO()) as output:
+            self.assertEqual(launch.main([]),1)
+            self.assertIn('Ctrl+C',output.getvalue())
+            self.assertIn('START_APP.bat',output.getvalue())
+
     def test_installed_assets_pass_preflight(self):
         self.assertIsNone(launch.preflight())
 

@@ -1,5 +1,6 @@
 """Portable local launcher. Only the Python standard library is needed for preflight."""
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -13,6 +14,20 @@ from urllib.request import urlopen
 import webbrowser
 
 ROOT = Path(__file__).resolve().parent.parent
+from backend.configuration import load_configuration
+load_configuration(ROOT)
+
+def installation_id():
+    return hashlib.sha256(str(ROOT.resolve()).casefold().encode('utf-8')).hexdigest()[:16]
+
+def classify_server(data):
+    if data.get('app') != 'motionai':
+        return None
+    if data.get('api_version') != 2:
+        return 'outdated'
+    if data.get('installation_id') != installation_id():
+        return 'other-motionai'
+    return 'motionai'
 
 
 def configure_local_runtime():
@@ -22,7 +37,7 @@ def configure_local_runtime():
         return
     location = Path(hint.read_text(encoding='utf-8-sig').strip())
     if location.is_dir():
-        sys.path.append(str(location))
+        sys.path.insert(0, str(location))
 
 
 def preflight():
@@ -48,8 +63,9 @@ def existing_server(port):
     try:
         with urlopen(f'http://127.0.0.1:{port}/api/health', timeout=2) as response:
             data = json.load(response)
-            if data.get('app') == 'motionai':
-                return 'motionai'
+            state = classify_server(data)
+            if state:
+                return state
     except (URLError, ValueError, OSError):
         pass
     with socket.socket() as connection:
@@ -89,6 +105,9 @@ def main(argv=None):
         if args.open_browser:
             webbrowser.open(f'http://localhost:{args.port}/')
         return 0
+    if state in ('outdated', 'other-motionai'):
+        print(f'An older or different MotionAI installation is already using port {args.port}.\nStop its launcher with Ctrl+C, then start START_APP.bat from this folder:\n{ROOT}\nYour recordings have not been changed.', file=sys.stderr)
+        return 1
     if state:
         print(f'Port {args.port} is in use by another program. Close that program or set MOTIONAI_PORT to a different port.', file=sys.stderr)
         return 1
