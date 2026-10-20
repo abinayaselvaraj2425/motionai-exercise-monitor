@@ -10,13 +10,14 @@ export const exercises = {
 };
 // Explicit demonstration thresholds, not a clinical assessment of safe range.
 export const movementTargets: Record<ExerciseType, { start: number; target: number; description: string }> = {
-  squat: { start: 155, target: 120, description: 'Bend the visible knee to 120° or less, then stand to 155° or more.' },
-  lunge: { start: 155, target: 120, description: 'Bend a visible knee to 120° or less, then return upright to 155° or more.' },
-  push_up: { start: 150, target: 110, description: 'In a side-on plank, bend the elbow to 110° or less, then extend to 150° or more.' },
-  jumping_jack: { start: 35, target: 135, description: 'Raise both arms to 135° or more with feet apart, then lower to 35° or less with feet together.' },
-  shoulder_press: { start: 115, target: 155, description: 'Start with elbows bent to 115° or less, extend overhead to 155° or more, then bend again.' },
+  squat: { start: 145, target: 125, description: 'Lower your hips through a comfortable, clear bend, then return upright.' },
+  lunge: { start: 145, target: 125, description: 'Step into a split stance, lower with control, then return upright.' },
+  push_up: { start: 140, target: 115, description: 'From a plank, lower your chest and press back to your starting position.' },
+  jumping_jack: { start: 45, target: 120, description: 'Open your arms and feet together, then bring them back to the start.' },
+  shoulder_press: { start: 125, target: 145, description: 'Start with bent elbows, press your hands overhead, then lower them again.' },
 };
 export type PoseMeasurement = {
+  exercise?: ExerciseType; gestureReady?: boolean;
   left: number | null; right: number | null; primary: number;
   rest: boolean; peak: boolean; feedback: string; visible: number; bodyAngle: number | null;
   leftReliable: boolean; rightReliable: boolean; trackingSide: Side | 'both';
@@ -98,7 +99,16 @@ function diagnose(exercise: ExerciseType, image: Joint[], world: Joint[], prefer
   let feedback = blockedReason ?? (peak ? 'Target reached. Return to the starting position to complete one rep.' : rest ? 'Starting position found. Follow the demo, then return here.' : targets.description);
   if (countable && exercise === 'push_up' && bodyAngle !== null && bodyAngle < 155) feedback = 'Keep your hips in line with your shoulders and ankles as you move.';
   else if (countable && both && exercise !== 'lunge' && Math.abs(left - right) > 25) feedback = 'Your two sides show different angles. Move slowly; check your position in the preview.';
-  const measurement: PoseMeasurement = { left: leftReliable ? left : null, right: rightReliable ? right : null, primary, rest, peak, feedback,
+  else if (countable && exercise === 'shoulder_press' && wrist && Math.abs(wrist.x-image[13+o].x)>Math.abs(wrist.y-image[13+o].y)*.7) feedback='Try keeping your wrists above your elbows as you press.';
+  let gestureReady=true;
+  if(exercise==='shoulder_press') gestureReady=ownOverhead(side) && angle(world[23+o],world[11+o],world[13+o])>80;
+  if(exercise==='jumping_jack') gestureReady=peak;
+  if(exercise==='lunge' && visible(image,27) && visible(image,28)) {
+    const feet=Math.hypot(world[27].x-world[28].x,world[27].z-world[28].z);
+    const leg=Math.hypot(world[23+o].x-world[27+o].x,world[23+o].y-world[27+o].y,world[23+o].z-world[27+o].z);
+    gestureReady=feet>leg*.3;
+  }
+  const measurement: PoseMeasurement = { exercise, gestureReady, left: leftReliable ? left : null, right: rightReliable ? right : null, primary, rest, peak, feedback,
     visible: [...requiredLeft(exercise), ...requiredLeft(exercise).map(i => i + 1)].filter(i => visible(image, i)).length,
     bodyAngle, leftReliable, rightReliable, trackingSide, confidence: trackingSide === 'both' ? Math.min(leftScore, rightScore) : side === 'left' ? leftScore : rightScore,
     countable, blockedReason, progress: clamp(extension ? (primary - targets.start) / (targets.target - targets.start) : (targets.start - primary) / (targets.start - targets.target)), targetLabel: targets.description };
@@ -156,8 +166,11 @@ export class RepCounter {
   private readyAt = 0;
   private candidateFrames = 0;
   private sideMask = 3;
-  resetPartial() { this.stage = 'waiting'; this.candidate = ''; this.candidateFrames = 0; this.lastSeen = -Infinity; this.sideMask = 3; }
-  update(m: { rest: boolean; peak: boolean; countable?: boolean; trackingSide?: Side | 'both' } | null, now: number) {
+  private baseline: number | null = null;
+  private peakAt = 0;
+  private adaptiveExercise: ExerciseType | null = null;
+  resetPartial() { this.stage = 'waiting'; this.candidate = ''; this.candidateFrames = 0; this.lastSeen = -Infinity; this.sideMask = 3; this.baseline=null;this.peakAt=0; }
+  update(m: { rest: boolean; peak: boolean; countable?: boolean; trackingSide?: Side | 'both'; exercise?:ExerciseType;primary?:number;gestureReady?:boolean } | null, now: number) {
     if (!Number.isFinite(now)) return false;
     if (now <= this.lastTime) { if (now < this.lastTime) this.resetPartial(); this.lastTime = now; return false; }
     this.lastTime = now;
@@ -168,6 +181,31 @@ export class RepCounter {
     if (!(this.sideMask & mask)) this.resetPartial();
     this.sideMask &= mask;
     this.lastSeen = now;
+    if(m.exercise && Number.isFinite(m.primary)) {
+      if(this.adaptiveExercise!==m.exercise){this.resetPartial();this.adaptiveExercise=m.exercise;this.lastSeen=now;this.sideMask=mask;}
+      const v=m.primary!,up=m.exercise==='shoulder_press'||m.exercise==='jumping_jack';
+      const startPose=up?v<=(m.exercise==='jumping_jack'?50:130):v>=135;
+      if(this.stage==='waiting') {
+        if(startPose){if(this.candidate!=='start'){this.candidate='start';this.since=now;}else if(now-this.since>=150){this.baseline=v;this.stage='ready';this.readyAt=now;}}
+        else this.candidate='';
+        return false;
+      }
+      if(this.baseline===null){this.resetPartial();return false;}
+      const excursion=up?v-this.baseline:this.baseline-v;
+      if(this.stage==='ready') {
+        if(Math.abs(v-this.baseline)<10)this.baseline=this.baseline*.95+v*.05;
+        const enough=excursion>=(m.exercise==='jumping_jack'?65:25)&&m.gestureReady!==false;
+        if(enough){if(!this.peakAt)this.peakAt=now;else if(now-this.peakAt>=100&&now-this.readyAt>=200){this.stage='target';this.started=now;this.candidate='';}}
+        else this.peakAt=0;
+      } else if(m.exercise==='jumping_jack'?m.rest:(up?v<=this.baseline+14:v>=this.baseline-14)) {
+        if(this.candidate!=='return'){this.candidate='return';this.since=now;}
+        else if(now-this.since>=100&&now-this.started>=180&&now-this.readyAt>=600&&now-this.lastRep>=600){
+          this.reps++;this.lastRep=now;this.stage='ready';this.readyAt=now;this.baseline=v;this.peakAt=0;this.candidate='';return true;
+        }
+      } else this.candidate='';
+      if(now-this.readyAt>30000)this.resetPartial();
+      return false;
+    }
     const state = m.rest ? 'rest' : m.peak ? 'peak' : 'moving';
     if (this.candidate !== state) { this.candidate = state; this.since = now; this.candidateFrames = 1; } else this.candidateFrames++;
     const stableRest = m.rest && this.candidateFrames >= 2 && now - this.since >= 50;

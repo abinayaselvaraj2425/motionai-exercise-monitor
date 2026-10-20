@@ -1,5 +1,14 @@
 # MotionAI — Personal Exercise Monitoring System
 
+## Workspace update · October 20, 2026
+
+The app now includes accounts, first-time setup, a redesigned Home/sidebar, tolerant movement-cycle counting, readable exercise/routine reports, day/week/month progress, detailed CSV exports, validated JSON backup/import, FAQs and an optional contextual AI assistant.
+
+Start with `INSTALL.bat`, then `START_APP.bat`. Create a username/password account, save the recovery code, and sign in. Google sign-in and the AI assistant require your optional provider credentials in `.env`; see `.env.example`.
+
+Read [the current implementation and setup notes](docs/IMPLEMENTATION.md) and [current verification results](docs/VERIFICATION_CURRENT.md). Older documentation and screenshots below describe the earlier version.
+
+
 A dark-themed exercise monitoring app with live joint tracking, automatic rep counting, guided workout routines, local progress analysis and real MotionBERT 3D pose inference.
 
 ## App preview

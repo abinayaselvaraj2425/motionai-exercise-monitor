@@ -41,6 +41,7 @@ function pose(type, degrees, { hiddenSide, lowConfidence = false, standingPushup
       world[27 + o] = point((open ? -.42 : -.11) * mirror, .7);
     }
   }
+  if(type==='lunge') for(let i=12;i<33;i+=2)world[i].z+=.5;
   const image = world.map(p => point(.5 + p.x * .36, .53 + p.y * .36));
   if (standingPushup) for (const o of [0, 1]) { image[11 + o] = point(.45 + o * .1, .3); image[23 + o] = point(.45 + o * .1, .55); }
   if (hiddenSide) for (let i = hiddenSide === 'left' ? 11 : 12; i <= 32; i += 2) { image[i].visibility = .1; world[i] = point(NaN, NaN, NaN); }
@@ -79,8 +80,8 @@ for (const type of Object.keys(movementTargets)) {
       assert.equal(c.reps, 5, `${type} @ ${fps} fps`);
     }
   });
-  test(`${type}: incomplete motion and holding a target never count`, () => {
-    assert.equal(sequence(type, [base, middle, base, middle, base]).reps, 0);
+  test(`${type}: tiny motion and holding a target never count`, () => {
+    assert.equal(sequence(type, [base, base + (extension ? 8 : -8), base, base + (extension ? 8 : -8), base]).reps, 0);
     assert.equal(sequence(type, [target, target, target, base]).reps, 0);
     assert.equal(sequence(type, [base, base, middle, target, target, target]).reps, 0);
   });
@@ -148,7 +149,7 @@ test('single-frame false peaks and threshold jitter cannot create repetitions', 
   const c = new RepCounter();
   observations(c, [[0, rest], [100, rest], [400, peak], [450, rest], [550, rest], [700, peak], [750, rest], [850, rest]]);
   assert.equal(c.reps, 0);
-  assert.equal(sequence('squat', [175, 175, 145, 123, 124, 122, 125, 140, 175, 175]).reps, 0);
+  assert.equal(sequence('squat', [175, 175, 170, 168, 170, 166, 172, 175, 175]).reps, 0);
 });
 test('brief occlusion preserves a cycle; prolonged loss cancels it', () => {
   const brief = new RepCounter();
@@ -184,5 +185,8 @@ test('reset, non-monotonic timestamps, duplicate frames and posture blocks never
     observations(c, [[600, rest], [700, rest]]); assert.equal(c.reps, 0);
   }
   const c = new RepCounter(); c.update(rest, 0); for (let i = 0; i < 20; i++) c.update(rest, 0); assert.equal(c.stage, 'waiting');
+});
+test('recognisable reduced-depth squats count without reaching the old fixed endpoint', () => {
+  assert.equal(sequence('squat', [165,165,150,132,132,150,165,165]).reps,1);
 });
 console.log(`\n${passed} pose-engine checks passed. Generated landmark fixtures are not evidence of real-camera recognition accuracy.`);

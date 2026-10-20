@@ -10,6 +10,8 @@ from tests.test_api import SubmissionTests
 class RoutineTests(unittest.TestCase):
     def setUp(self):
         self.previous=api.DB_PATH;self.path=api.ROOT/'tests'/'.test-data'/('routine-'+str(uuid.uuid4())+'.sqlite');self.path.parent.mkdir(exist_ok=True);api.DB_PATH=self.path;self.client=TestClient(api.app)
+        from tests import sign_in
+        sign_in(self.client)
     def tearDown(self):
         self.client.close();api.DB_PATH=self.previous;self.path.unlink(missing_ok=True)
     def start(self):

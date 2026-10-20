@@ -3,10 +3,10 @@ export interface RecordedFrame { timestamp:number; image:Joint[]; world:Joint[];
 export interface MotionResult { status:'complete'; model:string; checkpoint_sha256:string; parameters:number; latency_ms:number; input_shape:number[]; windows:number; frames:number[][][]; trajectories:{left:number[];right:number[]}; stats:{left_min:number;left_max:number;right_min:number;right_max:number;left_rom:number;right_rom:number;mean_difference:number}; mapping_notes:string[]; }
 export interface WorkoutSession { id:string; exercise:ExerciseType; date:string; reps:number; duration:number; target:number; source:'camera'|'import'; frames:RecordedFrame[]; motionbert:MotionResult|null; }
 export type SessionSummary = Omit<WorkoutSession,'frames'|'motionbert'> & {frame_count:number;analyzed:boolean;};
-export interface Profile { name:string; weeklyGoal:number; repTarget:number; audio:boolean; }
+export interface Profile { name:string; weeklyGoal:number; repTarget:number; audio:boolean; goal?:string; onboarded?:boolean; reducedMotion?:boolean; }
 export interface Health { status:string; motionbert:{loaded:boolean;name:string;error:string|null;parameters:number;checkpoint_sha256:string|null;}; }
 export async function api<T>(url:string,options:RequestInit={}):Promise<T> {
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),url.endsWith('/analyze')?180000:15000);
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),url.endsWith('/analyze')?180000:url==='/api/chat'?60000:30000);
  try {
   const response=await fetch(url,{...options,signal:options.signal||controller.signal,headers:{'Content-Type':'application/json',...options.headers}});
   if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('The local service returned an unexpected page. Start MotionAI and reload this tab.');

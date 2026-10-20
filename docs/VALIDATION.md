@@ -1,3 +1,5 @@
+> Historical validation record from the supplied project. For this update, use [VERIFICATION_CURRENT.md](VERIFICATION_CURRENT.md).
+
 # Validation record
 
 Verified in the local Windows environment, September 16, 2026.

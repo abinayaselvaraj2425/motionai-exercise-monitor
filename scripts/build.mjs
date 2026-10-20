@@ -12,6 +12,7 @@ const worker=await rollup({input:path.join(root,'src/pose-worker.ts'),plugins:[{
 await worker.write({file:path.join(root,'dist/assets/pose-worker.js'),format:'iife',sourcemap:true});await worker.close();
 await bundle.write({file:path.join(root,'dist/assets/app.js'),format:'es',sourcemap:true});await bundle.close();
 await fs.copyFile(path.join(root,'src/index.css'),path.join(root,'dist/assets/app.css'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/theme.css'),'utf8'));
 await fs.cp(path.join(root,'public'),path.join(root,'dist'),{recursive:true});
 await fs.cp(path.join(root,'node_modules/@mediapipe/tasks-vision/wasm'),path.join(root,'dist/mediapipe/wasm'),{recursive:true});
 let html=await fs.readFile(path.join(root,'index.html'),'utf8');html=html.replace('<script type="module" src="/src/main.tsx"></script>','<link rel="stylesheet" href="/assets/app.css"/><script type="module" src="/assets/app.js"></script>');
