@@ -18,6 +18,8 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 current_user = ContextVar('motionai_user', default=None)
+from backend.deployment import secure_cookies, google_redirect, production
+
 COOKIE = 'motionai_session'
 
 def digest(value):
@@ -46,9 +48,10 @@ def register_accounts(app, root):
             with db: yield db
         finally: db.close()
 
-    def limited(request, category):
-        key = category + ':' + (request.client.host if request.client else 'local')
+    def limited(request, category, account=None):
+        key = category + ':' + (digest(account) if account else (request.client.host if request.client else 'local'))
         with accounts() as db:
+            db.execute('BEGIN IMMEDIATE')
             db.execute('DELETE FROM attempts WHERE expires < ?', (time.time(),))
             row = db.execute('SELECT count FROM attempts WHERE key=?', (key,)).fetchone()
             if row and row[0] >= 20: raise HTTPException(429, 'Too many attempts. Please wait 15 minutes.')
@@ -60,7 +63,7 @@ def register_accounts(app, root):
         with accounts() as db:
             db.execute('DELETE FROM logins WHERE expires < ?', (time.time(),))
             db.execute('INSERT INTO logins VALUES (?,?,?)', (digest(token), user['id'], time.time()+7*86400))
-        response.set_cookie(COOKIE, token, httponly=True, samesite='lax', secure=os.getenv('MOTIONAI_SECURE_COOKIES') == '1', max_age=7*86400)
+        response.set_cookie(COOKIE, token, httponly=True, samesite='lax', secure=secure_cookies(), max_age=7*86400)
         return public(user)
 
     @app.middleware('http')
@@ -73,13 +76,18 @@ def register_accounts(app, root):
         ctx = current_user.set(dict(user) if user else None)
         try:
             if request.url.path.startswith('/api/') and request.url.path != '/api/health' and not request.url.path.startswith('/api/auth/') and not user:
-                return JSONResponse({'detail':'Please sign in to continue.'}, status_code=401)
-            response = await call_next(request)
+                response = JSONResponse({'detail':'Please sign in to continue.'}, status_code=401)
+            else:
+                response = await call_next(request)
             if request.url.path.startswith('/api/'):
                 response.headers['Cache-Control'] = 'no-store'
             response.headers['X-Content-Type-Options'] = 'nosniff'
             response.headers['Referrer-Policy'] = 'same-origin'
             response.headers['X-Frame-Options'] = 'DENY'
+            response.headers['Permissions-Policy']='camera=(self), microphone=(), geolocation=()'
+            if production():
+                response.headers['Strict-Transport-Security']='max-age=31536000'
+                response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; media-src 'self' blob: mediastream:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
             return response
         finally: current_user.reset(ctx)
 
@@ -111,6 +119,7 @@ def register_accounts(app, root):
     def login(data:dict, request:Request, response:Response):
         limited(request,'login')
         name,pw=credentials(data)
+        limited(request,'login-account',name)
         with accounts() as db: u=db.execute('SELECT * FROM users WHERE username=?',(name,)).fetchone()
         # Always perform a password derivation, including for an unknown user.
         valid=verify(pw,u['password'] if u and u['password'] else '00'*16+':'+'00'*64)
@@ -127,6 +136,7 @@ def register_accounts(app, root):
     def recover(data:dict, request:Request):
         limited(request,'recovery')
         name,pw=credentials(data)
+        limited(request,'recovery-account',name)
         code=data.get('recovery_code','')
         if not isinstance(code,str) or len(code)>200: raise HTTPException(422,'Invalid recovery code.')
         replacement=secrets.token_urlsafe(24)
@@ -143,7 +153,9 @@ def register_accounts(app, root):
         if not u: raise HTTPException(401,'Sign in first.')
         limited(request,'delete')
         if data.get('confirmation') != u['username']: raise HTTPException(422,'Type your username to confirm deletion.')
-        if u['password'] and not verify(str(data.get('password','')),u['password']): raise HTTPException(401,'Password is incorrect.')
+        password=data.get('password','')
+        if not isinstance(password,str) or len(password)>128:raise HTTPException(422,'Invalid password.')
+        if u['password'] and not verify(password,u['password']): raise HTTPException(401,'Password is incorrect.')
         with accounts() as db:
             db.execute('DELETE FROM logins WHERE user_id=?',(u['id'],))
             db.execute('DELETE FROM users WHERE id=?',(u['id'],))
@@ -156,28 +168,30 @@ def register_accounts(app, root):
         return {'deleted':True}
 
     @app.get('/api/auth/google/start')
-    def google_start():
+    def google_start(request:Request):
+        limited(request,'google')
         if not os.getenv('GOOGLE_CLIENT_ID') or not os.getenv('GOOGLE_CLIENT_SECRET'): raise HTTPException(503,'Google sign-in is not configured yet. Use a username and password.')
         state,nonce,verifier=[secrets.token_urlsafe(32) for _ in range(3)]
         with accounts() as db:
             db.execute('DELETE FROM oauth WHERE expires<?',(time.time(),))
             db.execute('INSERT INTO oauth VALUES (?,?,?,?)',(digest(state),nonce,verifier,time.time()+600))
-        redirect=os.getenv('GOOGLE_REDIRECT_URI','http://localhost:3000/api/auth/google/callback')
+        redirect=google_redirect()
         query=urlencode(dict(client_id=os.environ['GOOGLE_CLIENT_ID'],redirect_uri=redirect,response_type='code',scope='openid email profile',state=state,nonce=nonce,code_challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('='),code_challenge_method='S256'))
         response=RedirectResponse('https://accounts.google.com/o/oauth2/v2/auth?'+query)
-        response.set_cookie('motionai_oauth',state,httponly=True,samesite='lax',secure=os.getenv('MOTIONAI_SECURE_COOKIES')=='1',max_age=600)
+        response.set_cookie('motionai_oauth',state,httponly=True,samesite='lax',secure=secure_cookies(),max_age=600)
         return response
 
     @app.get('/api/auth/google/callback')
     async def google_callback(request:Request,code:str='',state:str=''):
         if not state or not hmac.compare_digest(state,request.cookies.get('motionai_oauth','')): raise HTTPException(400,'Google sign-in expired. Try again.')
         with accounts() as db:
+            db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT * FROM oauth WHERE state=? AND expires>?',(digest(state),time.time())).fetchone()
             db.execute('DELETE FROM oauth WHERE state=?',(digest(state),))
         if not row: raise HTTPException(400,'Google sign-in expired. Try again.')
         try:
             async with httpx.AsyncClient(timeout=20) as client:
-                result=await client.post('https://oauth2.googleapis.com/token',data=dict(code=code,client_id=os.environ['GOOGLE_CLIENT_ID'],client_secret=os.environ['GOOGLE_CLIENT_SECRET'],redirect_uri=os.getenv('GOOGLE_REDIRECT_URI','http://localhost:3000/api/auth/google/callback'),grant_type='authorization_code',code_verifier=row['verifier']))
+                result=await client.post('https://oauth2.googleapis.com/token',data=dict(code=code,client_id=os.environ['GOOGLE_CLIENT_ID'],client_secret=os.environ['GOOGLE_CLIENT_SECRET'],redirect_uri=google_redirect(),grant_type='authorization_code',code_verifier=row['verifier']))
                 result.raise_for_status()
                 token=result.json()['id_token']
                 # Token comes directly from Google's TLS token endpoint; validate all identity claims.

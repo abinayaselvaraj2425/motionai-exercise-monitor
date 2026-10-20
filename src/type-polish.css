@@ -1,0 +1,50 @@
+/* Editorial typography pass: stronger small-text contrast and easier sidebar scanning. */
+:root{--arena-muted:#a7b7b1}
+:root[data-theme="light"]{--arena-muted:#56675d}
+body{font-size:15.5px;line-height:1.62}
+.workspace-sidebar nav button,.workspace-sidebar .nav-home,.workspace-sidebar .sidebar-bottom>button{font-size:13.25px;font-weight:550;letter-spacing:.002em;min-height:46px}
+.workspace-sidebar .nav-label{font-size:10.5px;line-height:1.4;letter-spacing:.145em;font-weight:700;color:#87978e;margin-top:24px}
+:root[data-theme="light"] .workspace-sidebar .nav-label{color:#66776c}
+.workspace-sidebar .wordmark{font-size:26px;font-weight:700;letter-spacing:-.055em}
+.workspace-sidebar .sidebar-profile strong{font-size:13px;font-weight:650;line-height:1.3}
+.workspace-sidebar .sidebar-profile small{font-size:11.5px;line-height:1.35;color:#82928a}
+:root[data-theme="light"] .workspace-sidebar .sidebar-profile small{color:#63736a}
+.workspace-topbar{font-size:13px}
+.workspace-topbar>div:first-child,.workspace-topbar>div:last-child{font-size:12.5px}
+.workspace-topbar>div:first-child span,.workspace-topbar time{color:var(--arena-muted)}
+.workspace-topbar strong{font-size:13.5px;font-weight:650}
+.workspace-main .eyebrow,.account-page .eyebrow,.onboarding .eyebrow{font-size:11px;line-height:1.45;letter-spacing:.15em;font-weight:700}
+.page-heading h1{font-size:clamp(2.15rem,3.1vw,2.9rem)}
+.page-heading p{font-size:15.5px;line-height:1.62}
+.home-heading>div>p{font-size:15.5px}
+.section-heading h2{font-size:26px;font-weight:600}
+.panel h2{font-size:24px;line-height:1.24}
+.panel h3{font-size:19px;line-height:1.3}
+.start-card .eyebrow{font-size:10.5px;letter-spacing:.135em}
+.start-card p{font-size:13.5px;line-height:1.6}
+.start-card .card-action{font-size:11.5px;font-weight:700;letter-spacing:.075em}
+.destination-card h3{font-size:18px;font-weight:600;line-height:1.3}
+.destination-card p{font-size:12.75px;line-height:1.58}
+.goal-chip{font-size:12px;font-weight:650}
+.workspace-main small,.workspace-main .setting-help,.workspace-main .muted{font-size:12px;line-height:1.55}
+.settings-form label{font-size:13.5px;font-weight:550;line-height:1.5}
+.settings-form .preference-field legend{font-size:13px;font-weight:650}
+.settings-form .widget-options .check-label{font-size:12.5px;font-weight:500}
+.profile-photo-control strong{font-size:13px}
+.profile-photo-control small{font-size:12px}
+.metric-card>span{font-size:12.5px}
+.session-list small,.session-list p{font-size:12px}
+.workspace-footer{font-size:11.5px}
+.workspace-footer button{font-size:12px}
+:root[data-theme="light"] .workspace-main .eyebrow,:root[data-theme="light"] .account-page .eyebrow,:root[data-theme="light"] .onboarding .eyebrow{color:#4d762b}
+:root[data-theme="light"] .workspace-main small,:root[data-theme="light"] .workspace-main .setting-help,:root[data-theme="light"] .workspace-main .muted{color:#56685d}
+:root[data-theme="light"] .settings-form label{color:#25372c}
+:root[data-theme="light"] .workspace-topbar>div:first-child span,:root[data-theme="light"] .workspace-topbar time{color:#5d6d63}
+:root[data-theme="light"] .goal-chip{color:#3f6426}
+:root[data-theme="light"] .home-heading .eyebrow{color:#386f75}
+:root[data-theme="light"] .start-card .eyebrow{color:#426a22}
+:root[data-theme="light"] .routine-start .eyebrow{color:#684d96}
+@media(max-width:800px){.workspace-sidebar nav button,.workspace-sidebar .nav-home,.workspace-sidebar .sidebar-bottom>button{font-size:14px;min-height:46px}.workspace-main .eyebrow,.account-page .eyebrow{font-size:10.5px}.page-heading p{font-size:15px}}
+@media(max-width:520px){body{font-size:15px}.workspace-topbar{font-size:12px}.workspace-main .eyebrow{font-size:10px}.start-card p{font-size:13px}.destination-card h3{font-size:15.5px}.destination-card p{font-size:11.5px}.settings-form label{font-size:13px}.workspace-footer{font-size:10.5px}}
+.sidebar-profile>span:nth-child(2){min-width:0;flex:1}
+.sidebar-profile>span:nth-child(2) small{display:block;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}

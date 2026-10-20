@@ -129,7 +129,7 @@ export function MovementDemo({ exercise }: { exercise: ExerciseType }) {
     return <line key={`${color}-${pathIndex}-${i}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={color} strokeWidth="6" strokeLinecap="round" />;
   }));
   return <section className="demo-card">
-    <div className="section-heading"><span className="eyebrow">FOLLOW THE MOVEMENT</span><button className="icon-button" aria-label={play ? 'Pause movement demo' : 'Play movement demo'} aria-pressed={play} onClick={() => setPlay(!play)}>{play ? <Pause size={16} /> : <Play size={16} />}</button></div>
+    <div className="section-heading"><span className="eyebrow">Follow along</span><button className="icon-button" aria-label={play ? 'Pause movement demo' : 'Play movement demo'} aria-pressed={play} onClick={() => setPlay(!play)}>{play ? <Pause size={16} /> : <Play size={16} />}</button></div>
     <svg viewBox="0 0 260 245" role="img" aria-label={`${exercises[exercise].name} illustration. ${rangeText(exercise)}`}>
       <defs><pattern id={gridId} width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="#ffffff08" /></pattern></defs>
       <rect width="260" height="245" fill={`url(#${gridId})`} />

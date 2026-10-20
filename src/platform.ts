@@ -2,7 +2,9 @@ import {api,SessionSummary} from './data';
 export type User={id:string;username:string;provider:string};
 export type AuthState={user:User|null;google:boolean;chat:boolean};
 export type Metric={key:string;label:string;value:number|null;unit:string;description:string};
-export type MovementReport={version:string;source:string;exercise:string;coverage:number;measured_cycles:number;metrics:Metric[];observations:string[];focus:string;method:{joint:string;convention:string;quality:string;limits:string};trajectories:{left:(number|null)[];right:(number|null)[];times:number[]};comparison:{previous:{id:string;date:string;metrics:Metric[]}[];changes:{key:string;delta:number}[];note:string}};
+export type CoachingCard={key:string;title:string;observed:string;action:string;evidence:string;kind:'observed'|'practice'|'tracking'};
+export type Coaching={summary:string;cards:CoachingCard[];next_session:string[];scope:string};
+export type MovementReport={version:string;source:string;exercise:string;coverage:number;measured_cycles:number;metrics:Metric[];observations:string[];focus:string;coaching?:Coaching;method:{joint:string;convention:string;quality:string;limits:string};trajectories:{left:(number|null)[];right:(number|null)[];times:number[]};comparison:{plain_language?:string[];previous:{id:string;date:string;metrics:Metric[]}[];changes:{key:string;delta:number}[];note:string}};
 export const dayKey=(date:Date|string)=>{const d=new Date(date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 export const dateText=(date:string)=>new Date(date).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
 export function bounds(date:string,period:'day'|'week'|'month'){

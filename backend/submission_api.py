@@ -20,6 +20,7 @@ from backend.accounts import current_user, register_accounts
 ROOT = Path(__file__).resolve().parent.parent
 from backend.configuration import load_configuration
 load_configuration(ROOT)
+from backend.deployment import production, public_url, allowed_hosts, validate_deployment
 DB_PATH = Path(os.environ.get('MOTIONAI_DB', str(ROOT / 'data' / 'motionai.sqlite')))
 CHECKPOINT = ROOT / 'models' / 'motionbert' / 'best_epoch.bin'
 EXERCISES = {'squat', 'lunge', 'push_up', 'jumping_jack', 'shoulder_press'}
@@ -29,6 +30,15 @@ model_hash = None
 parameters = 0
 lock = threading.Lock()
 model_load_lock = threading.Lock()
+@contextmanager
+def analysis_slot():
+    # Avoid filling the request worker pool with long-running queued model jobs.
+    if not lock.acquire(blocking=False):
+        raise HTTPException(429, 'Another analysis is running. Please try again shortly.', headers={'Retry-After':'5'})
+    try:
+        yield
+    finally:
+        lock.release()
 model_state = 'loading'
 logger = logging.getLogger('motionai')
 CAMERA_FILES = {
@@ -100,6 +110,7 @@ def _load_model():
 
 @asynccontextmanager
 async def lifespan(app):
+    validate_deployment()
     with database() as db:
         db.execute('PRAGMA journal_mode=WAL')
     threading.Thread(target=load_model, name='motionbert-loader', daemon=True).start()
@@ -110,15 +121,19 @@ register_accounts(app, ROOT)
 
 @app.middleware('http')
 async def local_requests(request: Request, call_next):
-    allowed = os.getenv('MOTIONAI_ALLOWED_HOSTS', 'localhost,127.0.0.1,::1,testserver').split(',')
-    if request.url.hostname not in allowed:
+    allowed = allowed_hosts()
+    local_probe=request.url.path=='/healthz' and request.url.hostname in ('localhost','127.0.0.1','::1')
+    if request.url.hostname not in allowed and not local_probe:
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=400, content={'detail':'This host is not allowed.'})
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
-        origin = request.headers.get('origin')
-        if origin and origin != f"{request.url.scheme}://{request.headers.get('host')}":
+        if request.headers.get('sec-fetch-site')=='cross-site':
             from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=403, content={'detail':'Use the app from its own local address.'})
+            return JSONResponse(status_code=403,content={'detail':'Use the app from its own website address.'})
+        origin = request.headers.get('origin')
+        if origin and origin != (public_url() or f"{request.url.scheme}://{request.headers.get('host')}"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=403, content={'detail':'Use the app from its own website address.'})
         try:
             length = int(request.headers.get('content-length', '0'))
             if length < 0:
@@ -126,15 +141,16 @@ async def local_requests(request: Request, call_next):
         except ValueError:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=400, content={'detail':'Invalid upload length.'})
-        if length > 30_000_000:
+        limit = 100_000 if request.url.path.startswith('/api/auth/') or request.url.path=='/api/chat' else 30_000_000
+        if length > limit:
             from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=413, content={'detail':'Recording is too large. Maximum upload size is 30 MB.'})
+            return JSONResponse(status_code=413, content={'detail':'Request is too large for this endpoint.'})
         chunks=[];size=0
         async for chunk in request.stream():
             size+=len(chunk)
-            if size>30_000_000:
+            if size>limit:
                 from fastapi.responses import JSONResponse
-                return JSONResponse(status_code=413,content={'detail':'Recording is too large. Maximum upload size is 30 MB.'})
+                return JSONResponse(status_code=413,content={'detail':'Request is too large for this endpoint.'})
             chunks.append(chunk)
         request._body=b''.join(chunks)
     return await call_next(request)
@@ -147,22 +163,47 @@ class ProfileInput(BaseModel):
     goal: str = Field(default='Build a movement habit', max_length=100)
     onboarded: bool = False
     reducedMotion: bool = False
+    theme: str = Field(default='light', pattern='^(system|light|dark)$')
+    avatar: str = Field(default='', max_length=700000)
+    accent: str = Field(default='lime', pattern='^(lime|cyan|violet|coral)$')
+    density: str = Field(default='comfortable', pattern='^(comfortable|compact)$')
+    motionLevel: str = Field(default='soft', pattern='^(full|soft|off)$')
+    homeWidgets: list[str] = Field(default_factory=lambda: ['progress', 'reports', 'overview', 'studio'], min_length=1, max_length=4)
 
 @app.get('/api/profile')
 def get_profile():
     with database() as db:
         row = db.execute("SELECT payload FROM settings WHERE key='profile'").fetchone()
-    return json.loads(row[0]) if row else ProfileInput().model_dump()
+    stored = json.loads(row[0]) if row else {}
+    return {**ProfileInput().model_dump(), **stored}
 
 @app.put('/api/profile')
 def update_profile(profile: ProfileInput):
     profile.name = profile.name.strip()
     if not profile.name:
         raise HTTPException(422, 'Enter a name.')
+    if any(widget not in {'progress', 'reports', 'overview', 'studio'} for widget in profile.homeWidgets):
+        raise HTTPException(422, 'Choose from the available home dashboard widgets.')
+    if len(set(profile.homeWidgets))!=len(profile.homeWidgets):raise HTTPException(422,'Choose each home shortcut only once.')
+    if profile.avatar:
+        import base64,binascii
+        try:
+            header,encoded=profile.avatar.split(',',1)
+            if header not in ('data:image/jpeg;base64','data:image/png;base64','data:image/webp;base64'):raise ValueError()
+            photo=base64.b64decode(encoded,validate=True)
+            valid=photo.startswith(b'\xff\xd8\xff') if 'jpeg' in header else photo.startswith(b'\x89PNG\r\n\x1a\n') if 'png' in header else photo[:4]==b'RIFF' and photo[8:12]==b'WEBP'
+            if not valid or len(photo)>500000:raise ValueError()
+        except (ValueError,binascii.Error):raise HTTPException(422,'Use a JPG, PNG or WebP profile photo under 500 KB.')
     data = profile.model_dump()
     with database() as db:
         db.execute("INSERT OR REPLACE INTO settings VALUES ('profile', ?)", (json.dumps(data),))
     return data
+
+@app.get('/healthz',include_in_schema=False)
+def readiness():
+    if not camera_assets()['ready']:raise HTTPException(503,'Camera assets are missing.')
+    if os.getenv('MOTIONAI_REQUIRE_MODEL','1' if production() else '0')=='1' and model is None:raise HTTPException(503,'Analysis model is not ready.')
+    return {'status':'ready'}
 
 @app.get('/api/health')
 def health():
@@ -351,15 +392,16 @@ def motion_analysis(session):
 @app.post('/api/sessions/{session_id}/analyze')
 def analyze_session(session_id: str):
     if model is None:
-        raise HTTPException(503, 'MotionBERT is unavailable: '+str(model_error))
-    with lock:
+        raise HTTPException(503, 'MotionBERT is unavailable. Live recording still works; ask the owner to check model readiness.')
+    with analysis_slot():
         data=read_session(session_id)
         if data.get('motionbert'):
             return data
         try:
             data['motionbert']=motion_analysis(data)
         except Exception as exc:
-            raise HTTPException(500, 'MotionBERT inference failed: '+str(exc))
+            logger.exception('MotionBERT inference failed')
+            raise HTTPException(500, 'Analysis could not finish. Your recording is saved; please retry.') from exc
         with database() as db:
             db.execute('UPDATE sessions SET payload=? WHERE id=?',(json.dumps(data,allow_nan=False),session_id))
     return data
@@ -383,7 +425,7 @@ def research_analysis(name:str):
     try:data,tensor=model_input(name)
     except (ValueError,KeyError) as exc:raise HTTPException(422,str(exc))
     if len(tensor)>3600:raise HTTPException(422,'Recording exceeds model frame limit')
-    with lock,torch.inference_mode():
+    with analysis_slot(),torch.inference_mode():
         result=[model(torch.from_numpy(tensor[i:i+243]).unsqueeze(0)).squeeze(0).cpu().numpy() for i in range(0,len(tensor),243)]
     pose=np.concatenate(result);pose-=pose[:,0:1];pose[:,:,1:]*=-1
     if not np.isfinite(pose).all():raise HTTPException(500,'Model produced invalid coordinates')
@@ -412,4 +454,3 @@ def frontend(path: str):
     if not index.is_file():
         raise HTTPException(503, 'Build the frontend first with npm run build.')
     return FileResponse(index, headers={'Cache-Control':'no-cache'})
-

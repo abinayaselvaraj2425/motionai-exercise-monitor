@@ -13,7 +13,7 @@ import numpy as np
 from fastapi import HTTPException
 from fastapi.responses import Response
 
-METHOD = 'movement-observations-v2'
+METHOD = 'movement-observations-v3'
 NAMES={'squat':'Bodyweight squat','lunge':'Forward lunge','push_up':'Push-up','jumping_jack':'Jumping jack','shoulder_press':'Shoulder press'}
 JOINTS={'squat':[(23,25,27),(24,26,28)],'lunge':[(23,25,27),(24,26,28)],'push_up':[(11,13,15),(12,14,16)],'shoulder_press':[(11,13,15),(12,14,16)],'jumping_jack':[(23,11,13),(24,12,14)]}
 H36={'squat':[(4,5,6),(1,2,3)],'lunge':[(4,5,6),(1,2,3)],'push_up':[(11,12,13),(14,15,16)],'shoulder_press':[(11,12,13),(14,15,16)],'jumping_jack':[(4,11,12),(1,14,15)]}
@@ -28,19 +28,20 @@ def frame_gate(ex,image,world,width,height):
         if not visible(required):positions.append(False);gestures.append(False);continue
         shoulder,hip=image[11+o],image[23+o]
         if ex=='push_up':
-            dx=abs(shoulder['x']-hip['x']);dy=abs(shoulder['y']-hip['y']);body=angle(world,(11+o,23+o,27+o))
-            positioned=dx>=.06 and dy<=dx*1.15 and body is not None and body>=135
-        else:positioned=shoulder['y']<hip['y']-.025
+            dx=abs(shoulder['x']-hip['x'])*width/height;dy=abs(shoulder['y']-hip['y']);body=angle(world,(11+o,23+o,27+o))
+            positioned=dx>=.06 and dy<=dx*1.15 and body is not None and body>=105
+        else:positioned=shoulder['y']<hip['y']-.015
         gesture=True
         if ex=='shoulder_press':
             elevation=angle(world,(23+o,11+o,13+o))
-            gesture=image[15+o]['y']<shoulder['y']-.015 and elevation is not None and elevation>80
+            gesture=image[15+o]['y']<image[13+o]['y'] and image[15+o]['y']<shoulder['y']+.03 and elevation is not None and elevation>55
         positions.append(positioned);gestures.append(gesture)
     positioned=any(positions);gesture=any(p and g for p,g in zip(positions,gestures))
     if ex=='jumping_jack':
         positioned=all(positions) and visible([27,28])
         scale=max(.04,abs(image[23]['x']-image[24]['x']),abs(image[11]['x']-image[12]['x'])*.75)
-        gesture=positioned and abs(image[27]['x']-image[28]['x'])>=scale*1.8 and all(image[15+o]['y']<image[11+o]['y']-.015 for o in (0,1))
+        elevations=[angle(world,(23+o,11+o,13+o)) for o in (0,1)]
+        gesture=positioned and abs(image[27]['x']-image[28]['x'])>=scale*1.55 and all(v is not None and v>65 for v in elevations)
     elif ex=='lunge' and visible([27,28]):
         feet=np.linalg.norm(np.asarray(world[27])[[0,2]]-np.asarray(world[28])[[0,2]])
         leg=max(np.linalg.norm(np.asarray(world[23])-np.asarray(world[27])),np.linalg.norm(np.asarray(world[24])-np.asarray(world[28])))
@@ -81,37 +82,51 @@ def report(session):
             dx=(image[15]['x']-image[13]['x'])*f['width'];dy=(image[15]['y']-image[13]['y'])*f['height']
             slants.append(float(np.degrees(np.arctan2(abs(dx),max(.001,abs(dy))))))
     valid=[v for v in primary if v is not None]
-    valid_seconds=sum(min(.2,max(0,times[i]-times[i-1])) for i in range(1,len(times)) if primary[i] is not None and primary[i-1] is not None)
+    valid_seconds=sum(times[i]-times[i-1] for i in range(1,len(times)) if 0<times[i]-times[i-1]<=.65 and primary[i] is not None and primary[i-1] is not None)
     coverage=min(100,round(100*valid_seconds/max(1,session['duration'])))
     # Detect measurable excursions; keep these separate from the live rep count.
-    cycles=[];state='wait';baseline=extreme=None;start=0;last=None
+    cycles=[];state='wait';baseline=extreme=None;start=0;last=None;gesture_seen=False;candidate=None;learned=None;settling=[]
     extension=ex in ('shoulder_press','jumping_jack')
     for i,(t,v) in enumerate(zip(times,primary)):
         if v is None or last is not None and t-last>.65:
-            state='wait';baseline=None
+            state='wait';baseline=None;settling=[];gesture_seen=False;candidate=None;learned=None
+            extreme=None
         last=t
         if v is None: continue
-        rest=v<=(50 if ex=='jumping_jack' else 130) if extension else v>=135
+        rest=v<=(65 if ex=='jumping_jack' else 155) if extension else v>=110
         if state=='wait':
-            if rest: state='ready';baseline=extreme=v;start=i
+            if rest:
+                settling=[(j,x) for j,x in settling if t-times[j]<=.35]+[(i,v)]
+                if len(settling)>=2 and t-times[settling[0][0]]>=.1 and max(x for _,x in settling)-min(x for _,x in settling)<28:
+                    state='ready';baseline=extreme=(min if extension else max)(x for _,x in settling);start=settling[0][0]
+            else:settling=[]
             continue
-        if state=='ready' and rest:
-            baseline=min(baseline,v) if extension else max(baseline,v)
+        if state=='ready' and (v<baseline if extension else v>baseline):baseline=extreme=v
         excursion=(v-baseline) if extension else (baseline-v)
         extreme=max(extreme,v) if extension else min(extreme,v)
+        floor=45 if ex=='jumping_jack' else 20 if ex in ('push_up','shoulder_press') else 18
+        threshold=floor if learned is None else max(floor,min(floor+12,learned*.5))
+        if excursion>=threshold and gestures[i]:gesture_seen=True
         if state=='ready':
-            if abs(v-baseline)<10: start=i
-            if excursion>= (65 if ex=='jumping_jack' else 25) and gestures[i]: state='out'
-        elif state=='out' and (v<=baseline+14 if extension else v>=baseline-14):
+            if excursion<7:start=i
+            if excursion>=threshold:
+                if candidate is None:candidate=t
+                elif t-candidate>=.07:state='out';candidate=None
+            else:candidate=None
+        elif state=='out' and excursion<=max(7,min(16,abs(extreme-baseline)*.35)) and gesture_seen:
+            if ex=='jumping_jack':
+                image=frames[i]['image'];scale=max(.04,abs(image[23]['x']-image[24]['x']),abs(image[11]['x']-image[12]['x'])*.75)
+                if not all(v is not None and v<65 for v in (sides[0][i],sides[1][i])) or abs(image[27]['x']-image[28]['x'])>scale*1.55:continue
             duration=t-times[start]
-            if .6<=duration<=30:
+            if .45<=duration<=30:
                 segment=primary[start:i+1]
                 cycles.append({'range':number(abs(extreme-baseline)),'duration':number(duration),'peak':number(extreme),'start':start,'end':i})
-            state='ready';baseline=extreme=v;start=i
+                learned=abs(extreme-baseline) if learned is None else learned*.7+abs(extreme-baseline)*.3
+            state='ready';baseline=extreme=v;start=i;gesture_seen=False;candidate=None
         if t-times[start]>30: state='wait'
     usable=len(valid)>=10 and valid_seconds>=1
     ranges=[c['range'] for c in cycles];durations=[c['duration'] for c in cycles]
-    paired=[abs(a-b) for a,b in zip(*sides) if a is not None and b is not None]
+    paired=[abs(a-b) for i,(a,b) in enumerate(zip(*sides)) if primary[i] is not None and a is not None and b is not None]
     typical=median(ranges) if usable and len(cycles)>=2 else None
     variation=median([abs(x-typical) for x in ranges]) if typical is not None else None
     source='MotionBERT 3D' if use_model else 'Camera 3D estimate'
@@ -129,7 +144,11 @@ def report(session):
         observations.append('The shoulder–hip–ankle estimate frequently departed from a straight line. Check the side-view replay.');focus='Try moving your shoulders and hips together, keeping a comfortable plank position.'
     if ex=='shoulder_press' and len(slants)>=10 and np.median(slants)>30:
         observations.append('The camera view suggests your forearms were often angled away from vertical. Perspective can affect this observation.');focus='Check that your wrists stay approximately above your elbows as you press.'
-    return dict(version=METHOD,source=source,exercise=ex,coverage=coverage,measured_cycles=len(cycles),metrics=metrics,observations=observations,focus=focus,cycles=cycles,trajectories={'left':sides[0],'right':sides[1],'times':[f['timestamp'] for f in frames]},method={'joint':'Shoulder elevation' if ex=='jumping_jack' else 'Elbow bend' if ex in ('push_up','shoulder_press') else 'Knee bend','convention':'Geometric angle: 180° is a straight knee or elbow. Range is excursion, not maximum flexion.','quality':'Only visible joints are measured. Coverage estimates tracked seconds divided by active recording time. It is not a probability of accuracy.','limits':'Heuristic movement observations, not a diagnosis, strength measurement or medical recovery score. Use the same camera view and exercise variation when comparing.'})
+    from backend.coaching import coaching
+    advice=coaching(ex,frames,cycles,coverage,usable,metrics,primary,gestures,angle)
+    observed=next((c for c in advice['cards'] if c['kind']=='observed'),None)
+    if observed:focus=observed['action']
+    return dict(coaching=advice,version=METHOD,source=source,exercise=ex,coverage=coverage,measured_cycles=len(cycles),metrics=metrics,observations=observations,focus=focus,cycles=cycles,trajectories={'left':sides[0],'right':sides[1],'times':[f['timestamp'] for f in frames]},method={'joint':'Shoulder elevation' if ex=='jumping_jack' else 'Elbow bend' if ex in ('push_up','shoulder_press') else 'Knee bend','convention':'Geometric angle: 180° is a straight knee or elbow. Range is excursion, not maximum flexion.','quality':'Only visible joints are measured. Coverage estimates tracked seconds divided by active recording time. It is not a probability of accuracy.','limits':'Adaptive movement rules, not a trained exercise-quality classifier. MotionBERT supplies estimated 3D positions for angle metrics when selected; coaching uses original camera/world joints and visibility. A counted repetition is not a form score. Use the same camera view and exercise variation when comparing.'})
 
 def register_reports(app,database,read_session,validate_session,session_summary):
     def all_data():
@@ -157,7 +176,13 @@ def register_reports(app,database,read_session,validate_session,session_summary)
             for key in ('range','tempo','variation'):
                 values=[next(m['value'] for m in p['metrics'] if m['key']==key) for p in previous]
                 if current_metrics[key] is not None and all(v is not None for v in values): changes.append({'key':key,'delta':number(current_metrics[key]-np.mean(values))})
-        result['comparison']={'previous':previous,'changes':changes,'note':'Same exercise and analysis source; confirm the camera view, assistance and exercise variation were also similar. Numerical changes may include measurement error.' if changes else 'Two earlier sessions with the same exercise and analysis source, sufficient coverage and measurable cycles are needed.'}
+        plain=[]
+        for change in changes:
+            delta=change['delta'];key=change['key']
+            if key=='range':plain.append('Your typical bend was similar to your earlier sets.' if abs(delta)<3 else ('Your typical bend was larger than in your earlier sets. A larger bend is not automatically better.' if delta>0 else 'Your typical bend was smaller than in your earlier sets. Choose a range you can repeat comfortably.'))
+            elif key=='variation':plain.append('You repeated a more similar amount of bending from rep to rep.' if delta<-2 else 'Your amount of bending varied more between reps.' if delta>2 else 'Your movement repeatability was similar to your earlier sets.')
+            elif key=='tempo':plain.append('Your movements took about the same amount of time.' if abs(delta)<.3 else 'You moved more slowly than in your earlier sets. Slower is not automatically better.' if delta>0 else 'You moved more quickly than in your earlier sets. Keep both directions controlled.')
+        result['comparison']={'previous':previous,'changes':changes,'plain_language':plain,'note':'Same exercise and analysis source; confirm the camera view, assistance and exercise variation were also similar. Numerical changes may include measurement error.' if changes else 'Two earlier sessions with the same exercise and analysis source, sufficient coverage and measurable cycles are needed.'}
         return result
 
     def selection(start,end,session_id,routine_id):
@@ -192,16 +217,16 @@ def register_reports(app,database,read_session,validate_session,session_summary)
             return backup
         if format!='csv': raise HTTPException(422,'Choose CSV or JSON.')
         out=io.StringIO();writer=csv.writer(out)
-        writer.writerow(['record_type','session_id','routine_id','date','exercise_or_step','status','reps','target','active_seconds','analysis_source','coverage_percent','measured_cycles','range_degrees','repetition_seconds','range_variation_degrees','side_difference_degrees','observations','next_focus','method_version'])
+        writer.writerow(['record_type','session_id','routine_id','date','exercise_or_step','status','reps','target','active_seconds','analysis_source','coverage_percent','measured_cycles','range_degrees','repetition_seconds','range_variation_degrees','side_difference_degrees','observations','next_focus','method_version','coaching_summary','coaching_actions'])
         links={st['recording_id']:r['id'] for r in routines for st in r['steps']}
         safe=lambda v: "'"+v if isinstance(v,str) and v[:1] in ('=','+','-','@','\t','\r') else v
         for s in sessions:
             r=report(s);vals=[m['value'] for m in r['metrics']]
-            writer.writerow([safe(v) for v in ['exercise',s['id'],links.get(s['id'],''),s['date'],NAMES[s['exercise']],s.get('status','completed' if s['reps']>=s['target'] else 'partial'),s['reps'],s['target'],s['duration'],r['source'],r['coverage'],r['measured_cycles'],*vals,' '.join(r['observations']),r['focus'],METHOD]])
+            writer.writerow([safe(v) for v in ['exercise',s['id'],links.get(s['id'],''),s['date'],NAMES[s['exercise']],s.get('status','completed' if s['reps']>=s['target'] else 'partial'),s['reps'],s['target'],s['duration'],r['source'],r['coverage'],r['measured_cycles'],*vals,' '.join(r['observations']),r['focus'],METHOD,r['coaching']['summary'],' '.join(r['coaching']['next_session'])]])
         for r in routines:
             for st in r['steps']:
                 if 'exercise' not in st or st.get('status') in ('skipped','missing','pending'):
-                    writer.writerow([safe(v) for v in ['routine_step','',r['id'],r['date'],st['name'],st['status'],st.get('reps',''),st.get('target',''),st.get('duration',0),'Self-reported guided step' if 'exercise' not in st else 'Not recorded','','','','','','','','',METHOD]])
+                    writer.writerow([safe(v) for v in ['routine_step','',r['id'],r['date'],st['name'],st['status'],st.get('reps',''),st.get('target',''),st.get('duration',0),'Self-reported guided step' if 'exercise' not in st else 'Not recorded','','','','','','','','',METHOD,'','']])
         return Response(out.getvalue(),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="motionai-report.csv"'})
 
     @app.get('/api/trends')
