@@ -130,7 +130,7 @@ class PlatformTests(unittest.TestCase):
     def test_missing_providers_are_explicit(self):
         with patch.dict('os.environ',{'OPENAI_API_KEY':'','GOOGLE_CLIENT_ID':'','GOOGLE_CLIENT_SECRET':''}):
             self.assertFalse(self.client.get('/api/auth/me').json()['chat'])
-            self.assertEqual(self.client.post('/api/chat',json={'messages':[{'role':'user','content':'What is range?'}]}).status_code,503)
+            self.assertEqual(self.client.post('/api/chat',json={'messages':[{'role':'user','content':'What is range?'}]}).json()['mode'],'help')
             self.assertEqual(self.client.get('/api/auth/google/start').status_code,503)
 
 if __name__=='__main__':unittest.main()

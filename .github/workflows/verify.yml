@@ -1,0 +1,47 @@
+name: Verify MotionAI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: npm ci
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.8,<3"
+      - run: pip install -r requirements.txt
+      - run: python scripts/download_assets.py
+      - run: python scripts/download_checkpoint.py
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:ui
+      - run: npm run build
+      - run: python -m unittest tests.test_hardening tests.test_deployment tests.test_coaching tests.test_direct tests.test_launch tests.test_api tests.test_platform tests.test_routines -v
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t motionai-check .
+      - name: Verify container startup and readiness
+        run: |
+          docker run -d --name motionai-check -p 8000:8000 -e MOTIONAI_ENV=local motionai-check
+          trap 'docker logs motionai-check; docker rm -f motionai-check' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8000/healthz; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

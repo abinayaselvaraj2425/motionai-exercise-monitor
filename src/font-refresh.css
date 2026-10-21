@@ -1,0 +1,64 @@
+/* Human, editorial typography: warm Lora headlines with clear, friendly Lato UI text. */
+:root{--font-ui:'Lato',Arial,sans-serif;--font-display:'Lora',Georgia,serif}
+html,body,#root,button,input,select,textarea{font-family:var(--font-ui)!important}
+body{font-size:17px;line-height:1.65;letter-spacing:0;color:var(--arena-text)}
+h1,h2{font-family:var(--font-display)!important;letter-spacing:-.035em!important;font-weight:600}
+h3,h4{font-family:var(--font-ui)!important;letter-spacing:-.018em!important;font-weight:700}
+p,button,input,select,textarea,label,a,small{letter-spacing:0}
+.workspace-main .eyebrow,.account-page .eyebrow,.onboarding .eyebrow{font-family:var(--font-ui)!important;font-size:13px;font-weight:700;letter-spacing:.015em;text-transform:none;line-height:1.45}
+.workspace-sidebar .nav-label{font-family:var(--font-ui)!important;font-size:13px;font-weight:700;letter-spacing:.01em;text-transform:none;color:#6d7c71}
+:root[data-theme="light"] .workspace-sidebar .nav-label{color:#56675d}
+.workspace-sidebar nav button,.workspace-sidebar .nav-home,.workspace-sidebar .sidebar-bottom>button{font-family:var(--font-ui)!important;font-size:15.5px;font-weight:600;letter-spacing:0}
+.workspace-sidebar .wordmark{font-family:var(--font-ui)!important;font-weight:800;letter-spacing:-.045em}
+.workspace-sidebar .sidebar-profile strong{font-family:var(--font-ui)!important;font-size:14px;font-weight:700}
+.workspace-sidebar .sidebar-profile small{font-family:var(--font-ui)!important;font-size:13px;line-height:1.4}
+.workspace-topbar>div:first-child,.workspace-topbar>div:last-child{font-size:14px}
+.workspace-topbar strong{font-size:15px;font-weight:700}
+:root[data-theme="light"] .page-heading h1{font-size:clamp(2.8rem,4.4vw,4.4rem);line-height:1.08;letter-spacing:-.045em!important}
+:root[data-theme="light"] .page-heading p{font-size:17px;line-height:1.6;color:#4f6055}
+:root[data-theme="light"] .home-heading h1{font-size:clamp(3.25rem,6.1vw,5.15rem);line-height:1.02;letter-spacing:-.06em!important;font-weight:600}
+:root[data-theme="light"] .home-heading>div>p{font-size:17px;color:#53645a}
+:root[data-theme="light"] .section-heading h2{font-family:var(--font-display)!important;font-size:32px;font-weight:600;letter-spacing:-.035em!important}
+:root[data-theme="light"] .panel h2{font-family:var(--font-display)!important;font-size:28px;font-weight:600;letter-spacing:-.03em!important}
+:root[data-theme="light"] .panel h3{font-family:var(--font-ui)!important;font-size:21px;font-weight:700}
+:root[data-theme="light"] .start-card h2{font-family:var(--font-display)!important;font-size:clamp(2.15rem,3.3vw,3rem);font-weight:600;letter-spacing:-.045em!important;line-height:1.06}
+:root[data-theme="light"] .start-card p{font-family:var(--font-ui)!important;font-size:15.5px;line-height:1.6}
+:root[data-theme="light"] .start-card .eyebrow{font-size:13px;letter-spacing:0;font-weight:700}
+:root[data-theme="light"] .start-card .card-action{font-size:13px;font-weight:700;letter-spacing:0}
+:root[data-theme="light"] .destination-card h3{font-family:var(--font-ui)!important;font-size:20px;font-weight:700;letter-spacing:-.02em!important}
+:root[data-theme="light"] .destination-card p{font-family:var(--font-ui)!important;font-size:14.5px;line-height:1.55}
+:root[data-theme="light"] .goal-chip{font-size:14px;font-weight:700}
+:root[data-theme="light"] .workspace-main small,:root[data-theme="light"] .workspace-main .setting-help,:root[data-theme="light"] .workspace-main .muted{font-family:var(--font-ui)!important;font-size:14px;line-height:1.5;color:#4d5e53}
+:root[data-theme="light"] .settings-form label{font-family:var(--font-ui)!important;font-size:15px;font-weight:600;line-height:1.5;color:#24362b}
+:root[data-theme="light"] .settings-form .preference-field legend{font-size:15px;font-weight:700}
+:root[data-theme="light"] .settings-form .widget-options .check-label{font-size:14px;font-weight:600}
+:root[data-theme="light"] .profile-photo-control strong{font-size:15px;font-weight:700}
+:root[data-theme="light"] .profile-photo-control small{font-size:13.5px}
+:root[data-theme="light"] .metric-card>span{font-size:14px}
+:root[data-theme="light"] .session-list small,:root[data-theme="light"] .session-list p{font-size:14px}
+:root[data-theme="light"] .primary-button,:root[data-theme="light"] .secondary-button,:root[data-theme="light"] .text-button{font-family:var(--font-ui)!important;font-size:15px;font-weight:700;letter-spacing:0}
+:root[data-theme="light"] .workspace-footer{font-size:13px}
+:root[data-theme="light"] .workspace-footer button{font-size:14px;font-weight:600}
+:root[data-theme="light"] .account-story h1{font-family:var(--font-display)!important;font-size:clamp(3.1rem,5vw,5rem);line-height:1.08;letter-spacing:-.045em!important}
+:root[data-theme="light"] .account-story>div:nth-child(2) .eyebrow{font-size:13px;letter-spacing:.02em;text-transform:none}
+:root[data-theme="light"] .account-story p{font-size:17px;line-height:1.65}
+:root[data-theme="light"] .account-inner h2{font-family:var(--font-display)!important;font-size:40px;font-weight:600;letter-spacing:-.04em!important}
+:root[data-theme="light"] .account-inner>p{font-size:16px;line-height:1.55}
+:root[data-theme="light"] .account-inner label{font-size:15px;font-weight:600}
+:root[data-theme="light"] .account-inner small{font-size:13px;line-height:1.5}
+:root[data-theme="light"] .onboarding>.panel h1{font-family:var(--font-display)!important;font-size:clamp(2.8rem,5vw,4rem);line-height:1.1}
+:root[data-theme="light"] .onboarding>.panel>p{font-size:16px;line-height:1.6}
+:root[data-theme="light"] .onboarding>.panel label{font-size:15px;font-weight:600}
+:root[data-theme="light"] .resume-banner strong{font-size:15px}
+:root[data-theme="light"] .resume-banner small{font-size:13.5px}
+:root[data-theme="light"] .report-details summary{font-size:16px;font-weight:700}
+@media(max-width:1100px){:root[data-theme="light"] .home-heading h1{font-size:clamp(3rem,6vw,4.4rem)}}
+@media(max-width:800px){body{font-size:16px}.workspace-sidebar nav button,.workspace-sidebar .nav-home,.workspace-sidebar .sidebar-bottom>button{font-size:16px}.workspace-main .eyebrow,.account-page .eyebrow,.onboarding .eyebrow{font-size:12px}:root[data-theme="light"] .page-heading h1{font-size:clamp(2.6rem,7vw,3.7rem)}:root[data-theme="light"] .home-heading h1{font-size:clamp(2.8rem,8.8vw,4rem)}:root[data-theme="light"] .account-story h1{font-size:clamp(2.6rem,7vw,4rem)}}
+@media(max-width:520px){body{font-size:16px}.workspace-sidebar .nav-label{font-size:13px}.workspace-main .eyebrow,.account-page .eyebrow{font-size:12px}:root[data-theme="light"] .home-heading h1{font-size:clamp(2.6rem,10vw,3.2rem)}:root[data-theme="light"] .page-heading h1{font-size:clamp(2.35rem,9vw,3.1rem)}:root[data-theme="light"] .page-heading p,:root[data-theme="light"] .home-heading>div>p{font-size:16px}:root[data-theme="light"] .section-heading h2{font-size:28px}:root[data-theme="light"] .start-card h2{font-size:clamp(1.9rem,7vw,2.35rem)}:root[data-theme="light"] .start-card p{font-size:14.5px}:root[data-theme="light"] .destination-card h3{font-size:18px}:root[data-theme="light"] .destination-card p{font-size:13px}:root[data-theme="light"] .settings-form label{font-size:14px}:root[data-theme="light"] .workspace-main small,:root[data-theme="light"] .workspace-main .setting-help{font-size:13px}:root[data-theme="light"] .account-inner h2{font-size:34px}}
+:root[data-theme="light"] .start-card .card-action{text-transform:none!important;letter-spacing:0;font-size:14px}
+:root[data-theme="light"] .workspace-main .eyebrow,:root[data-theme="light"] .account-page .eyebrow,:root[data-theme="light"] .onboarding .eyebrow{text-transform:none!important;letter-spacing:.01em}
+:root[data-theme="light"] .sidebar-profile>span:nth-child(2) small{font-size:13px;line-height:1.35}
+:root[data-theme="light"] .workspace-main .panel p{font-size:15px!important;line-height:1.55;color:#4d5e53!important}
+:root[data-theme="light"] .workspace-main .panel small{font-size:14px!important;line-height:1.5}
+:root[data-theme="light"] .settings-form .setting-help{font-size:14.5px!important;line-height:1.55}
+:root[data-theme="light"] .profile-photo-control small{font-size:14px}

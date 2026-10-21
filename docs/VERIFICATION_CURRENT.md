@@ -1,5 +1,7 @@
 # Current verification · October 20, 2026
 
+For the latest Studio build, use [STUDIO_VERIFICATION.md](STUDIO_VERIFICATION.md). The results below describe the earlier workspace version.
+
 Passed in this workspace:
 
 - TypeScript check (`npm run lint`).

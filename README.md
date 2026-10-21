@@ -1,4 +1,18 @@
-# MotionAI — Personal Exercise Monitoring System
+# Current release: original design + deployment update
+
+Use [START_HERE.md](START_HERE.md) for this package and [docs/RELEASE_REVIEW.md](docs/RELEASE_REVIEW.md) for changes. The design is restored from MotionAI-redesigned (2).zip; later Studio palette experiments are not included. Earlier notes below are historical.
+
+# MotionAI Studio
+
+Start with [START_HERE.md](START_HERE.md). Run INSTALL.bat once, then START_APP.bat.
+
+This Studio package adds the new ivory/green design, restores responsive counting and detailed coaching, improves built-in/connected chat, and includes Docker/Render deployment files.
+
+For hosting, Google sign-in and chatbot credentials, follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). For current test results and limitations, see [docs/STUDIO_VERIFICATION.md](docs/STUDIO_VERIFICATION.md).
+
+No hosting resources have been created and this version has not been pushed to GitHub. Browser/webcam trials, a container build and live provider checks remain pending outside this environment.
+
+Everything below is historical documentation; the old screenshots do not show Studio.
 
 ## Workspace update · October 20, 2026
 

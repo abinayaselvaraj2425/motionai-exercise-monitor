@@ -1,0 +1,18 @@
+# Uses a paid instance and persistent disk. Review Render's costs before applying.
+services:
+  - type: web
+    name: motionai
+    runtime: docker
+    plan: 1c-2g
+    healthCheckPath: /healthz
+    disk:
+      name: motionai-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      # Add OPENAI_API_KEY, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
+      # manually as server secrets after the first deployment if desired.

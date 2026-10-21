@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import assert from 'node:assert/strict';
 const code = ts.transpileModule(fs.readFileSync(new URL('../src/pose.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { angle, RepCounter, PoseTracker, measure, movementTargets } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
+const { angle, RepCounter, PoseTracker, measure, movementTargets, LiveCoach } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
 let passed = 0;
 function test(name, fn) { fn(); passed++; console.log('PASS:', name); }
 const point = (x, y, z = 0, visibility = .99) => ({ x, y, z, visibility });
@@ -189,4 +189,37 @@ test('reset, non-monotonic timestamps, duplicate frames and posture blocks never
 test('recognisable reduced-depth squats count without reaching the old fixed endpoint', () => {
   assert.equal(sequence('squat', [165,165,150,132,132,150,165,165]).reps,1);
 });
+test('different personal starting angles and reduced ranges remain countable',()=>{
+ for(const [type,base,end] of [['squat',132,106],['lunge',132,106],['push_up',138,110],['shoulder_press',130,158],['jumping_jack',25,100]]){
+  const c=sequence(type,[base,base,(base+end)/2,end,end,(base+end)/2,base,base]);
+  assert.equal(c.reps,1,`${type}: personal start ${base}`);
+ }
+});
+test('short and slow continuous movements do not require a perfect peak',()=>{
+ for(const [type,base,end] of [['squat',150,118],['lunge',150,118],['push_up',150,118],['shoulder_press',115,150]])for(const duration of [900,7000]){
+  const tracker=new PoseTracker(),counter=new RepCounter(),fps=20;
+  for(let now=0;now<=400+duration*3+400;now+=1000/fps){const phase=now<400||now>=400+duration*3?0:(now-400)%duration/duration;const value=base+(end-base)*(1-Math.cos(2*Math.PI*phase))/2;const p=pose(type,value);counter.update(tracker.update(type,p.image,p.world,now).measurement,now);}
+  assert.equal(counter.reps,3,`${type} ${duration} ms`);
+ }
+});
+test('wrong shoulder-press direction cannot count even with large elbow bends',()=>{
+ const c=new RepCounter();let now=0;for(const value of [100,100,130,160,160,130,100,100])for(let n=0;n<5;n++){c.update({exercise:'shoulder_press',primary:value,rest:value<125,peak:value>145,countable:true,gestureReady:false},now);now+=50;}assert.equal(c.reps,0);
+});
+test('one-frame technique noise is filtered, persistent advice appears and clears',()=>{
+ const coach=new LiveCoach(),m=measure('squat',...Object.values(pose('squat',175)));
+ const bad={...m,coaching:'Keep your chest lifted.'};
+ assert.equal(coach.update(bad,0),'');assert.equal(coach.update({...m,coaching:''},50),'');
+ for(let t=100;t<=450;t+=50)coach.update(bad,t);
+ assert.equal(coach.update(bad,500),bad.coaching);
+ for(let t=550;t<=1250;t+=50)coach.update({...m,coaching:''},t);
+ assert.equal(coach.update({...m,coaching:''},1300),'');assert.equal(coach.update(null,1400),'');
+});
+// Share known-coordinate trajectories with independent server report tests.
+fs.mkdirSync(new URL('./.test-data/',import.meta.url),{recursive:true});
+const fixtures={};
+for(const [type,base,end]of [['squat',132,106],['lunge',150,118],['push_up',150,118],['shoulder_press',115,150],['jumping_jack',25,100]]){
+ const frames=[];for(let i=0;i<=124;i++){const now=i*100;const phase=now<400||now>=12400?0:(now-400)%2000/2000;const p=pose(type,base+(end-base)*(1-Math.cos(2*Math.PI*phase))/2);frames.push({...p,timestamp:now,width:1000,height:1000,metrics:{primary:0,feedback:'Fake imported advice'}});}
+ fixtures[type]={exercise:type,frames,motionbert:null,reps:6,target:10,duration:12.4};
+}
+fs.writeFileSync(new URL('./.test-data/known-movements.json',import.meta.url),JSON.stringify(fixtures));
 console.log(`\n${passed} pose-engine checks passed. Generated landmark fixtures are not evidence of real-camera recognition accuracy.`);

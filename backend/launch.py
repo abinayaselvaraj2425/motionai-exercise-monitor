@@ -89,6 +89,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:
         parser.error('The port must be between 1024 and 65535.')
+    os.environ['MOTIONAI_PORT']=str(args.port)
     configure_local_runtime()
     problem = preflight()
     if problem:

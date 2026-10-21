@@ -14,7 +14,7 @@ async function setup({draft,failSave=false,failCamera=false,autoFinishAtTarget=t
  class PoseClient{async start(){}async detect(){return {image:Array.from({length:33},joint),world:Array.from({length:33},joint),inferenceMs:10};}close(){log.closes++;}}
  class RepCounter{reps=0;stage='ready';update(){this.reps++;return true;}resetPartial(){}}
  class PoseTracker{reset(){}update(){return {measurement:{left:160,right:160,primary:160,countable:true,rest:true,visible:8,bodyAngle:170},message:'Test fixture'};}}
- const pose={PoseTracker,RepCounter,exercises:{squat:{name:'Squat',joint:'Knee',cue:'Show joints'}},movementTargets:{squat:{start:155,target:120,description:'Bend and return'}}};
+ const pose={LiveCoach:class{reset(){}update(){return '';}},PoseTracker,RepCounter,exercises:{squat:{name:'Squat',joint:'Knee',cue:'Show joints'}},movementTargets:{squat:{start:155,target:120,description:'Bend and return'}}};
  const data={api:async(url,options)=>{const value=JSON.parse(options.body);log.saves.push(value);if(failSave)throw Error('Test offline');return {...value,id:value.client_id,motionbert:null};},formatTime:String,saveFile(){}};
  const camera={openCamera:async()=>{log.opens++;if(failCamera)throw Error('Test camera denied');return {getVideoTracks:()=>[{addEventListener(){}}]};},playCamera:async()=>{},stopStream:s=>{if(s)log.stops++;},cameraError:e=>e.message,errorText:e=>e.message};
  const recovery={readDraft:async()=>draft,writeDraft:async value=>{log.backups.push(value);}};

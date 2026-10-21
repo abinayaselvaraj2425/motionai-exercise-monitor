@@ -13,8 +13,13 @@ await worker.write({file:path.join(root,'dist/assets/pose-worker.js'),format:'ii
 await bundle.write({file:path.join(root,'dist/assets/app.js'),format:'es',sourcemap:true});await bundle.close();
 await fs.copyFile(path.join(root,'src/index.css'),path.join(root,'dist/assets/app.css'));
 await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/theme.css'),'utf8'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/redesign.css'),'utf8'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/polish.css'),'utf8'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/type-polish.css'),'utf8'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/font-refresh.css'),'utf8'));
+await fs.appendFile(path.join(root,'dist/assets/app.css'),'\n'+await fs.readFile(path.join(root,'src/functional.css'),'utf8'));
 await fs.cp(path.join(root,'public'),path.join(root,'dist'),{recursive:true});
 await fs.cp(path.join(root,'node_modules/@mediapipe/tasks-vision/wasm'),path.join(root,'dist/mediapipe/wasm'),{recursive:true});
-let html=await fs.readFile(path.join(root,'index.html'),'utf8');html=html.replace('<script type="module" src="/src/main.tsx"></script>','<link rel="stylesheet" href="/assets/app.css"/><script type="module" src="/assets/app.js"></script>');
+let html=await fs.readFile(path.join(root,'index.html'),'utf8');html=html.replace('<script type="module" src="/src/main.tsx"></script>','<link rel="stylesheet" href="/assets/app.css?v=deployable-1"/><script type="module" src="/assets/app.js?v=deployable-1"></script>');
 await fs.writeFile(path.join(root,'dist/index.html'),html);
 console.log('Production app built successfully.');
